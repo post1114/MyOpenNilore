@@ -106,8 +106,9 @@ public class KillAura extends Module {
             () -> this.style.is("Old"));
     public final BooleanSetting overrideRaycast = new BooleanSetting("Override Raycast", true,
             () -> this.style.is("Old") || this.style.is("onTickRot"));
-    public final BooleanSetting throughWalls    = new BooleanSetting("Through Walls", false,
-            () -> this.style.is("onTickRot"));
+    public final BooleanSetting throughWalls    = new BooleanSetting("Through Walls", false);
+    public final NumberSetting throughWallsRange = new NumberSetting("Through Walls Range", 3.0, 1.0, 6.0, 0.1,
+            () -> (Boolean) this.throughWalls.getValue());
     public final BooleanSetting ignoreSkipTicks = new BooleanSetting("Ignore skip ticks", false);
     public final BooleanSetting fakeAutoBlock   = new BooleanSetting("Fake AutoBlock", true);
     public final BooleanSetting test            = new BooleanSetting("Test", false);
@@ -676,15 +677,21 @@ public class KillAura extends Module {
                 return false;
             }
         }
-        // Wall check — reject if a block is between player and entity
-        if (this.style.is("onTickRot") && !(Boolean) this.throughWalls.getValue()) {
-            if (mc.level == null) return false;
-            Vec3 eyePos = mc.player.getEyePosition(1.0f);
-            Vec3 targetPoint = RotationUtil.closestPoint(eyePos, entity.getBoundingBox());
-            if (eyePos.distanceToSqr(targetPoint) > 1.0E-4) {
-                BlockHitResult blockHit = mc.level.clip(new ClipContext(eyePos, targetPoint, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, mc.player));
-                if (blockHit.getType() == HitResult.Type.BLOCK) {
-                    return false;
+        // Wall check (New / onTickRot only) — reject if a block sits between
+        // the player and the entity. When "Through Walls" is on and the
+        // target is close enough, the check is skipped so you can attack
+        // through thin walls at close range.
+        if ((this.style.is("New") || this.style.is("onTickRot")) && mc.level != null) {
+            boolean skipWallCheck = this.throughWalls.getValue()
+                    && dist <= this.throughWallsRange.getValue().floatValue();
+            if (!skipWallCheck) {
+                Vec3 eyePos = mc.player.getEyePosition(1.0f);
+                Vec3 targetPoint = RotationUtil.closestPoint(eyePos, entity.getBoundingBox());
+                if (eyePos.distanceToSqr(targetPoint) > 1.0E-4) {
+                    BlockHitResult blockHit = mc.level.clip(new ClipContext(eyePos, targetPoint, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, mc.player));
+                    if (blockHit.getType() == HitResult.Type.BLOCK) {
+                        return false;
+                    }
                 }
             }
         }

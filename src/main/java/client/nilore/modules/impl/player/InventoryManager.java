@@ -90,6 +90,11 @@ public class InventoryManager
     private boolean skipNextTick = false;
     private boolean silentNoSprintWasSprinting = false;
     private boolean silentNoSprintWasKeySprintDown = false;
+    private Object lastScreen = null;
+    private long lastClickTime = 0L;
+    private int lastClickSlot = -1;
+    private ClickType lastClickType = null;
+    private long blockInteractCooldownUntil = 0L;
 
     public InventoryManager() {
         super("InventoryManager", Category.PLAYER, 66);
@@ -97,12 +102,43 @@ public class InventoryManager
     }
 
     @Override
+    protected void onEnable() {
+        this.resetManagerState();
+        super.onEnable();
+    }
+
+    @Override
     protected void onDisable() {
-        this.inventoryOpen = false;
-        isPerformingAction = false;
-        this.skipNextTick = false;
+        this.resetManagerState();
         this.releaseSilentSprint();
         super.onDisable();
+    }
+
+    private void resetManagerState() {
+        this.inventoryOpen = false;
+        this.pendingOffhandPlace = false;
+        this.noMoveTicks = 0;
+        this.sprintWaitTicks = 0;
+        isPerformingAction = false;
+        this.skipNextTick = false;
+        actionTimer.reset();
+    }
+
+    private boolean lastScreenChanged() {
+        Object screen = mc == null ? null : mc.screen;
+        if (screen == this.lastScreen) {
+            return false;
+        }
+        this.lastScreen = screen;
+        this.resetClickState();
+        return true;
+    }
+
+    private void resetClickState() {
+        this.lastClickTime = 0L;
+        this.lastClickSlot = -1;
+        this.lastClickType = null;
+        this.blockInteractCooldownUntil = 0L;
     }
 
     @EventTarget
@@ -177,6 +213,7 @@ public class InventoryManager
         if (motionEvent.isPost() && mc.player != null && mc.getConnection() != null && mc.gameMode != null) {
             // Sync functional blocks flag to ItemUtil
             ItemUtil.excludeFunctionalBlocks = this.functionalBlocksFix.getValue();
+            this.lastScreenChanged();
             ContainerScreen containerScreen;
             if (!this.validateSlotConfig()) {
                 this.inventoryOpen = false;

@@ -8,6 +8,8 @@ import net.minecraft.network.protocol.game.ClientboundAnimatePacket;
 import net.minecraft.network.protocol.game.ClientboundContainerClosePacket;
 import net.minecraft.network.protocol.game.ClientboundDisconnectPacket;
 import net.minecraft.network.protocol.game.ClientboundHurtAnimationPacket;
+import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
+import net.minecraft.network.protocol.game.ClientboundPingPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerCombatKillPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
@@ -17,6 +19,7 @@ import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.effect.MobEffects;
@@ -45,6 +48,7 @@ public class NoXZMode
         extends AntiKBMode {
     public static NoXZMode INSTANCE;
     public static boolean isAttacking;
+    public static boolean handlingVelocity;
     public static int attackCount;
     private int attackCooldown = 0;
     private Entity attackTarget = null;
@@ -139,6 +143,13 @@ public class NoXZMode
             return;
         }
         if (this.isSuspending) {
+            if (packet instanceof ClientboundMoveEntityPacket
+                    || packet instanceof ClientboundPingPacket
+                    || packet instanceof ClientboundTeleportEntityPacket) {
+                this.packetQueue.add(packet);
+                receivePacketEvent.setCancelled(true);
+                return;
+            }
             if (!this.isAllowedPacket(packet)) {
                 this.packetQueue.add(packet);
                 receivePacketEvent.setCancelled(true);
@@ -163,6 +174,7 @@ public class NoXZMode
                 boolean canAttack = this.isValidTarget(target = this.getAttackTarget()) && mc.player.isSprinting();
                 if (!mc.player.onGround()) {
                     this.isSuspending = true;
+                    handlingVelocity = true;
                     this.suspendTicks = 0;
                     this.knockbackPacket = motionPacket;
                     receivePacketEvent.setCancelled(true);
@@ -171,6 +183,7 @@ public class NoXZMode
                     this.attacksRemaining = this.getAttackCount(motionPacket);
                 } else {
                     this.isSuspending = true;
+                    handlingVelocity = true;
                     this.suspendTicks = 0;
                     this.knockbackPacket = motionPacket;
                     receivePacketEvent.setCancelled(true);
@@ -215,6 +228,7 @@ public class NoXZMode
 
     private void resetSuspension() {
         this.isSuspending = false;
+        handlingVelocity = false;
         this.suspendTicks = 0;
         this.knockbackPacket = null;
         this.packetQueue.clear();
@@ -367,6 +381,7 @@ public class NoXZMode
                         this.attacksRemaining = (int)this.instantAttackProgress;
                         this.scheduleMotionFlush();
                         this.isSuspending = false;
+                        handlingVelocity = false;
                         this.suspendTicks = 0;
                         this.isFlushing = false;
                         this.isInstantAttacking = true;
@@ -375,6 +390,7 @@ public class NoXZMode
                         this.doAttackSequence(tickEvent);
                         this.scheduleMotionFlush();
                         this.isSuspending = false;
+                        handlingVelocity = false;
                         this.suspendTicks = 0;
                         this.isFlushing = false;
                     }
@@ -519,6 +535,7 @@ public class NoXZMode
         this.scheduleMotionFlush();
         this.isFlushing = false;
         this.isSuspending = false;
+        handlingVelocity = false;
         this.suspendTicks = 0;
         this.instantAttackProgress = 0.0f;
         this.isInstantAttacking = false;
@@ -527,6 +544,7 @@ public class NoXZMode
 
     static {
         isAttacking = false;
+        handlingVelocity = false;
         attackCount = 0;
     }
 }
