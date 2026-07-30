@@ -7,17 +7,12 @@ import org.objectweb.asm.commons.Remapper
 
 buildscript {
     repositories {
+        maven { url = 'https://maven.aliyun.com/repository/public' }
+        maven { url = 'https://maven.aliyun.com/repository/central' }
+        maven { url = 'https://maven.minecraftforge.net/' }
         mavenCentral()
     }
     dependencies {
-        // ASM is used by the build-time class-name obfuscation step (ext.obfuscateJar).
-        // It runs on the already-built jar, so it lives on the buildscript classpath
-        // rather than the project compile/runtime classpath.
-        //
-        // NOTE: the buildscript-classpath ASM also backs Groovy's build-script type
-        // resolution, so it must be able to read the class files of the JDK that runs
-        // Gradle. ASM 9.6 supports up to Java 21 (major version 65) — run Gradle on the
-        // project's JDK 17 (not a newer JDK like 25/major 69, which 9.6 cannot read).
         classpath 'org.ow2.asm:asm-commons:9.6'
     }
 }
@@ -153,6 +148,10 @@ repositories {
     //     dir 'libs'
     // }
 
+    maven { url = 'https://maven.aliyun.com/repository/public' }
+    maven { url = 'https://maven.aliyun.com/repository/google' }
+    maven { url = 'https://maven.aliyun.com/repository/central' }
+    maven { url = 'https://maven.aliyun.com/repository/gradle-plugin' }
     maven { url = "https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1" }
 }
 
@@ -624,7 +623,8 @@ tasks.register('configureNative', Exec) {
         def args = [cmake, '-S', '.', '-B', 'build', '-A', 'x64',
                 "-DCMAKE_TOOLCHAIN_FILE=${vcpkg}/scripts/buildsystems/vcpkg.cmake",
                 '-DVCPKG_TARGET_TRIPLET=x64-windows-static',
-                '-DVCPKG_HOST_TRIPLET=x64-windows-static']
+                '-DVCPKG_HOST_TRIPLET=x64-windows-static',
+                "-DVCPKG_OVERLAY_TRIPLETS=${nativeDir}"]
         if (rev) args << "-DOPENZEN_BUILD_REVISION=${rev}"
         commandLine args
     }
