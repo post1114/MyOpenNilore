@@ -90,12 +90,18 @@ public class GuiPatch {
         float dx = hud.getX();
         float dy = hud.getY();
 
-        // first-time auto-position
-        if (hud.getWidth() == 0.0f) {
+        // first-time auto-position — only fires once per session,
+        // and only if the HUD is still at its default (0, 20) position
+        // (i.e. the player hasn't moved it or config hasn't restored a saved position).
+        if (!hud.isAtDefaultPosition()) {
+            hud.markPositionLoaded();
+        }
+        if (!hud.autoPositioned() && hud.isAtDefaultPosition()) {
             dx = hud.mc.getWindow().getGuiScaledWidth() - cw - 3.0f;
+            dy = 20.0f;
             hud.setX(dx);
-            hud.setY(20.0f);
-            hud.clampToScreen(cw, ch);
+            hud.setY(dy);
+            hud.markPositionLoaded();
         }
 
         // ── glow ──

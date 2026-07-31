@@ -1,125 +1,66 @@
 package client.nilore.modules.impl.movement;
 
-import java.util.LinkedHashSet;
-import net.minecraft.network.PacketListener;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.ClientGamePacketListener;
-import net.minecraft.network.protocol.game.ClientboundPingPacket;
-import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
-import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
-import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
-import client.nilore.event.impl.ReceivePacketEvent;
-import client.nilore.event.impl.RotationEvent;
-import client.nilore.event.impl.TickEvent;
+import net.minecraft.world.phys.Vec3;
+import client.nilore.event.EventTarget;
+import client.nilore.event.impl.GameTickEvent;
 import client.nilore.modules.Category;
 import client.nilore.modules.Module;
-import client.nilore.event.EventTarget;
 
 public class Fly extends Module {
     public static Fly INSTANCE;
-
-    public record HeldPacket(Packet<?> packet) {
-    }
-
-    private boolean elytraActive = false;
-    private boolean initialized = false;
-    private int pingCount = 0;
-    private final LinkedHashSet<HeldPacket> pendingPackets = new LinkedHashSet<>();
 
     public Fly() {
         super("Fly", Category.MOVEMENT);
         INSTANCE = this;
     }
 
-    @Override
-    public void onEnable() {
-        this.elytraActive = false;
-        this.initialized = false;
-        this.pingCount = 0;
-        this.pendingPackets.clear();
-        if (mc.player == null || (mc.level == null && !mc.player.onGround())) {
-            this.setEnabled(false);
-        }
-    }
-
-    @Override
-    public void onDisable() {
-        this.releasePackets(true);
-    }
-
     @EventTarget
-    public void onRotation(RotationEvent event) {
+    public void onGameTick(GameTickEvent event) {
         if (mc.player == null) return;
-        if (mc.player.onGround() && this.initialized && !mc.options.keyJump.isDown()) {
-            mc.player.jumpFromGround();
-            this.initialized = false;
-        }
-    }
 
-    @EventTarget
-    public void onTick(TickEvent event) {
-        if (!this.isEnabled() || mc.player == null || mc.level == null) return;
-        if (!this.initialized) {
-            this.initialized = true;
-            return;
-        }
-        if (!this.elytraActive) {
-            if (!mc.player.onGround() && mc.player.getDeltaMovement().y > 0.0) {
-                this.elytraActive = true;
-                this.sendElytraPacket();
-            }
-            return;
-        }
-        if (this.pingCount > 8) {
-            this.sendElytraPacket();
-        }
-    }
+        boolean forward = mc.options.keyUp.isDown();
+        boolean back = mc.options.keyDown.isDown();
+        boolean left = mc.options.keyLeft.isDown();
+        boolean right = mc.options.keyRight.isDown();
+        boolean jump = mc.options.keyJump.isDown();
+        boolean sneak = mc.options.keyShift.isDown();
 
-    private void sendElytraPacket() {
-        mc.getConnection().send(new ServerboundPlayerCommandPacket(
-                mc.player, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));
-    }
+        Vec3 lookVec = mc.player.getLookAngle();
+        Vec3 forwardVec = new Vec3(lookVec.x, 0, lookVec.z).normalize();
+        Vec3 rightVec = forwardVec.cross(new Vec3(0, 1, 0)).normalize();
 
-    @EventTarget
-    public void onReceivePacket(ReceivePacketEvent event) {
-        if (!this.isEnabled() || mc.player == null) return;
-        Packet<ClientGamePacketListener> packet = event.getPacket();
-        if (!this.initialized) return;
-        if (packet instanceof ClientboundSetEntityMotionPacket motion
-                && motion.getId() == mc.player.getId()) {
-            this.pingCount = 0;
-        }
-        if (packet instanceof ClientboundPingPacket && this.elytraActive) {
-            event.setCancelled(true);
-            this.pendingPackets.add(new HeldPacket(packet));
-            ++this.pingCount;
-        }
-        if (packet instanceof ClientboundPlayerPositionPacket) {
-            event.setCancelled(true);
-            this.pendingPackets.add(new HeldPacket(packet));
-            this.releasePackets(true);
-            this.pingCount = 0;
-        }
-    }
+        double moveForward = 0;
+        double moveStrafe = 0;
+        if (forward) moveForward += 1;
+        if (back) moveForward -= 1;
+        if (right) moveStrafe += 1;
+        if (left) moveStrafe -= 1;
 
-    private void releasePackets(boolean flush) {
-        synchronized (this.pendingPackets) {
-            if (flush) {
-                this.pendingPackets.forEach(held -> {
-                    if (mc.getConnection() != null) {
-                        try {
-                            handlePacket(held.packet, mc.getConnection());
-                        } catch (Exception ignored) {
-                        }
-                    }
-                });
-                this.pendingPackets.clear();
-            }
+        double length = Math.sqrt(moveForward * moveForward + moveStrafe * moveStrafe);
+        if (length > 1.0) {
+            moveForward /= length;
+            moveStrafe /= length;
         }
-    }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private static void handlePacket(Packet packet, PacketListener listener) {
-        packet.handle(listener);
+        double speed = 0.44;
+        Vec3 horizontalVelocity = new Vec3(0, 0, 0);
+        if (moveForward != 0 || moveStrafe != 0) {
+            Vec3 dir = forwardVec.scale(moveForward).add(rightVec.scale(moveStrafe));
+            horizontalVelocity = dir.scale(speed);
+        }
+
+        double verticalSpeed = 0.44;
+        double yMotion;
+        if (jump) {
+            yMotion = verticalSpeed;
+        } else if (sneak) {
+            yMotion = -verticalSpeed;
+        } else {
+            yMotion = 0.0;
+        }
+
+        mc.player.setDeltaMovement(horizontalVelocity.x, yMotion, horizontalVelocity.z);
+        mc.player.setOnGround(true);
+        mc.player.fallDistance = 0;
     }
 }

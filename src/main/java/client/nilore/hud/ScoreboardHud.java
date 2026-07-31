@@ -19,7 +19,11 @@ import net.minecraft.util.Mth;
  */
 public class ScoreboardHud extends HudElement {
 
-    private static final float MIN_VISIBLE_EDGE = 0.0f;
+    private static final float MIN_VISIBLE_EDGE = 2.0f;
+    private static final float DEFAULT_X = 0.0f;
+    private static final float DEFAULT_Y = 20.0f;
+
+    private boolean autoPositioned = false;
 
     public final BooleanSetting backgroundEnabled = new BooleanSetting("Background", true);
     public final NumberSetting backgroundAlpha    = new NumberSetting("Background Alpha", 60, 0, 255, 1);
@@ -31,8 +35,8 @@ public class ScoreboardHud extends HudElement {
 
     public ScoreboardHud() {
         super("Scoreboard");
-        setX(0.0f);
-        setY(20.0f);
+        setX(DEFAULT_X);
+        setY(DEFAULT_Y);
         setWidth(0.0f);
         setHeight(0.0f);
     }
@@ -41,6 +45,14 @@ public class ScoreboardHud extends HudElement {
     public void registerSettings() {
         registerSetting(backgroundEnabled, backgroundAlpha, backgroundRadius,
                         glowEnabled, glowRadius, glowAlpha);
+    }
+
+    /**
+     * Called by ValuesConfig after restoring this HUD's X/Y from config.
+     * Prevents first-time auto-position from overriding a saved position.
+     */
+    public void markPositionLoaded() {
+        this.autoPositioned = true;
     }
 
     /** No-op — rendering is done in GuiPatch. */
@@ -53,12 +65,17 @@ public class ScoreboardHud extends HudElement {
     @Override
     public void onSettings() {}
 
+    /**
+     * Clamp this HUD's position so it stays fully visible on screen.
+     * Safe to call even when mc.getWindow() is not ready (no-op).
+     */
     public void clampToScreen(float width, float height) {
         if (mc == null || mc.getWindow() == null) return;
         float sw = mc.getWindow().getGuiScaledWidth();
         float sh = mc.getWindow().getGuiScaledHeight();
-        float maxX = Math.max(MIN_VISIBLE_EDGE, sw - Math.min(width, sw) - MIN_VISIBLE_EDGE);
-        float maxY = Math.max(MIN_VISIBLE_EDGE, sh - Math.min(height, sh) - MIN_VISIBLE_EDGE);
+        if (sw < 1.0f || sh < 1.0f) return;          // window not ready yet
+        float maxX = Math.max(MIN_VISIBLE_EDGE, sw - width - MIN_VISIBLE_EDGE);
+        float maxY = Math.max(MIN_VISIBLE_EDGE, sh - height - MIN_VISIBLE_EDGE);
         setX(Mth.clamp(getX(), MIN_VISIBLE_EDGE, maxX));
         setY(Mth.clamp(getY(), MIN_VISIBLE_EDGE, maxY));
     }
@@ -77,5 +94,21 @@ public class ScoreboardHud extends HudElement {
         if (wasDragging) {
             client.nilore.NiloreClient.getInstance().getConfigManager().saveAll();
         }
+    }
+
+    /**
+     * Reset auto-position flag so the next render re-positions.
+     * Used when migrating from old configs that may have a stale position.
+     */
+    public void resetAutoPosition() {
+        this.autoPositioned = false;
+    }
+
+    public boolean autoPositioned() {
+        return autoPositioned;
+    }
+
+    public boolean isAtDefaultPosition() {
+        return getX() == DEFAULT_X && getY() == DEFAULT_Y;
     }
 }
